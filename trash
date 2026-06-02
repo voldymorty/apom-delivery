@@ -1,0 +1,137 @@
+// To parse this JSON data, do
+//
+//     final profileModel = profileModelFromJson(jsonString);
+
+import 'dart:convert';
+
+ProfileModel profileModelFromJson(String str) => ProfileModel.fromJson(json.decode(str));
+
+String profileModelToJson(ProfileModel data) => json.encode(data.toJson());
+
+class ProfileModel {
+    bool success;
+    Data data;
+
+    ProfileModel({
+        required this.success,
+        required this.data,
+    });
+
+    factory ProfileModel.fromJson(Map<String, dynamic> json) => ProfileModel(
+        success: json["success"],
+        data: Data.fromJson(json["data"]),
+    );
+
+    Map<String, dynamic> toJson() => {
+        "success": success,
+        "data": data.toJson(),
+    };
+}
+
+class Data {
+    int deliveryPersonId;
+    int userId;
+    String fullName;
+    dynamic profilePhotoUrl;
+    String vehicleType;
+    String vehicleNumber;
+    String licenseNumber;
+    DateTime licenseExpiryDate;
+    bool isAvailable;
+    dynamic currentLatitude;
+    dynamic currentLongitude;
+    dynamic lastLocationUpdate;
+    int totalDeliveries;
+    int completedDeliveries;
+    String rating;
+    DateTime createdAt;
+    DateTime updatedAt;
+    User user;
+
+    Data({
+        required this.deliveryPersonId,
+        required this.userId,
+        required this.fullName,
+        required this.profilePhotoUrl,
+        required this.vehicleType,
+        required this.vehicleNumber,
+        required this.licenseNumber,
+        required this.licenseExpiryDate,
+        required this.isAvailable,
+        required this.currentLatitude,
+        required this.currentLongitude,
+        required this.lastLocationUpdate,
+        required this.totalDeliveries,
+        required this.completedDeliveries,
+        required this.rating,
+        required this.createdAt,
+        required this.updatedAt,
+        required this.user,
+    });
+
+    factory Data.fromJson(Map<String, dynamic> json) => Data(
+        deliveryPersonId: json["delivery_person_id"],
+        userId: json["user_id"],
+        fullName: json["full_name"],
+        profilePhotoUrl: json["profile_photo_url"],
+        vehicleType: json["vehicle_type"],
+        vehicleNumber: json["vehicle_number"],
+        licenseNumber: json["license_number"],
+        licenseExpiryDate: DateTime.parse(json["license_expiry_date"]),
+        isAvailable: json["is_available"],
+        currentLatitude: json["current_latitude"],
+        currentLongitude: json["current_longitude"],
+        lastLocationUpdate: json["last_location_update"],
+        totalDeliveries: json["total_deliveries"],
+        completedDeliveries: json["completed_deliveries"],
+        rating: json["rating"],
+        createdAt: DateTime.parse(json["created_at"]),
+        updatedAt: DateTime.parse(json["updated_at"]),
+        user: User.fromJson(json["user"]),
+    );
+
+    Map<String, dynamic> toJson() => {
+        "delivery_person_id": deliveryPersonId,
+        "user_id": userId,
+        "full_name": fullName,
+        "profile_photo_url": profilePhotoUrl,
+        "vehicle_type": vehicleType,
+        "vehicle_number": vehicleNumber,
+        "license_number": licenseNumber,
+        "license_expiry_date": "${licenseExpiryDate.year.toString().padLeft(4, '0')}-${licenseExpiryDate.month.toString().padLeft(2, '0')}-${licenseExpiryDate.day.toString().padLeft(2, '0')}",
+        "is_available": isAvailable,
+        "current_latitude": currentLatitude,
+        "current_longitude": currentLongitude,
+        "last_location_update": lastLocationUpdate,
+        "total_deliveries": totalDeliveries,
+        "completed_deliveries": completedDeliveries,
+        "rating": rating,
+        "created_at": createdAt.toIso8601String(),
+        "updated_at": updatedAt.toIso8601String(),
+        "user": user.toJson(),
+    };
+}
+
+class User {
+    String mobileNumber;
+    dynamic email;
+    bool isActive;
+
+    User({
+        required this.mobileNumber,
+        required this.email,
+        required this.isActive,
+    });
+
+    factory User.fromJson(Map<String, dynamic> json) => User(
+        mobileNumber: json["mobile_number"],
+        email: json["email"],
+        isActive: json["is_active"],
+    );
+
+    Map<String, dynamic> toJson() => {
+        "mobile_number": mobileNumber,
+        "email": email,
+        "is_active": isActive,
+    };
+}

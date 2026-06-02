@@ -1,0 +1,25 @@
+﻿Analyzing 2 items...                                            
+
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\profile_screen.dart:107:46 - deprecated_member_use
+
+flutter : 1 issue 
+found. (ran in 1.1s)
+At line:1 char:1
++ flutter analyze lib/S
+creens/task_screen.dart
+ lib/Screens/profile_sc
+re ...
++ ~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (1 issue found   
+ . (ran in 1.1s):St    
+ring) [], RemoteEx    
+ception
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
