@@ -5,7 +5,7 @@ class AppColors {
   // Role-based colors
   static const Color farmerColor = Color(0xFF3E2723); // Deep Brown
   static const Color vendorColor = Color(0xFF0061FF); // Vibrant Blue
-  static const Color deliveryColor = Color(0xFF7A1CAC); // Emerald Green
+  static const Color deliveryColor = Color(0xFF7A1CAC); 
 
   // Primary theme colors
   static const Color primaryGreen = Color(0xFF7A1CAC);

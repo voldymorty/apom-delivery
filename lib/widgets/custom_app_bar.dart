@@ -93,7 +93,7 @@ class CustomAppBar extends StatelessWidget {
       style: TextStyle(
         fontSize: titleFontSize ?? (centerTitle ? 14 : 22),
         fontWeight: FontWeight.w900,
-        color: isDark ? Colors.white : (centerTitle ? Colors.blue : AppColors.textPrimary),
+        color: isDark ? Colors.white : (centerTitle ? AppColors.deliveryColor : AppColors.textPrimary),
       ),
     );
   }

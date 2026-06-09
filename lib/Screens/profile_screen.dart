@@ -1,5 +1,6 @@
 import 'package:delivery/Screens/Login_screen.dart';
 import 'package:delivery/Screens/history_screen.dart';
+import 'package:delivery/Screens/personal_details_screen.dart';
 import 'package:delivery/widgets/custom_app_bar.dart';
 import 'package:delivery/global/colortheme.dart';
 import 'package:flutter/material.dart';
@@ -25,6 +26,7 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
+  // ─── Loading ───────────────────────────────────────────────────────────────
   Widget _buildLoading(BuildContext context) {
     return Stack(
       alignment: Alignment.bottomCenter,
@@ -70,6 +72,8 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
+  // ─── Error ─────────────────────────────────────────────────────────────────
+
   Widget _buildError(BuildContext context, Object error, WidgetRef ref) {
     return Center(
       child: Padding(
@@ -79,9 +83,9 @@ class ProfileScreen extends ConsumerWidget {
           children: [
             const Icon(Icons.error_outline, color: Colors.red, size: 36),
             const SizedBox(height: 12),
-            Text(
+            const Text(
               'Unable to load profile',
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
             ),
             const SizedBox(height: 8),
             Text(
@@ -103,6 +107,8 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
+  // ─── Content ───────────────────────────────────────────────────────────────
+
   Widget _buildContent(
     BuildContext context,
     WidgetRef ref,
@@ -115,16 +121,23 @@ class ProfileScreen extends ConsumerWidget {
         child: Column(
           children: [
             _buildHeroHeader(context, profile.data),
-            // const SizedBox(height: 24),
-            // _buildStatsRow(profile.data),
-            const SizedBox(height: 32),
+            const SizedBox(height: 12),
+            _buildNameBlock(profile.data),
+            const SizedBox(height: 28),
             _buildSectionHeader('ACCOUNT'),
             _buildProfileOption(
               Icons.person_outline_rounded,
               'Personal Details',
-              subtitle: 'Edit your information',
+              subtitle: 'View your information',
               iconColor: Colors.blue,
-              onTap: () {},
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const PersonalDetailsScreen(),
+                  ),
+                );
+              },
             ),
             _buildProfileOption(
               Icons.history_rounded,
@@ -132,15 +145,11 @@ class ProfileScreen extends ConsumerWidget {
               subtitle: 'View past deliveries',
               iconColor: Colors.orange,
               onTap: () {
-                Navigator.push(context,MaterialPageRoute(builder: (context)=> HistoryScreen()));
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => HistoryScreen()),
+                );
               },
-            ),
-            _buildProfileOption(
-              Icons.notifications_none_rounded,
-              'Notifications',
-              subtitle: 'Preferences and alerts',
-              iconColor: Colors.purple,
-              onTap: () {},
             ),
             const SizedBox(height: 24),
             _buildSectionHeader('SUPPORT'),
@@ -173,6 +182,8 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
+  // ─── Logout dialog ─────────────────────────────────────────────────────────
+
   void _showLogoutDialog(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
@@ -189,17 +200,21 @@ class ProfileScreen extends ConsumerWidget {
               await ref.read(profileControllerProvider.notifier).logout();
               if (context.mounted) {
                 Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (context) => const LoginScreen()),
+                  MaterialPageRoute(
+                      builder: (context) => const LoginScreen()),
                   (route) => false,
                 );
               }
             },
-            child: const Text('Logout', style: TextStyle(color: Colors.red)),
+            child:
+                const Text('Logout', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
   }
+
+  // ─── Hero header ───────────────────────────────────────────────────────────
 
   Widget _buildHeroHeader(BuildContext context, Data data) {
     final imageUrl = _profileImageUrl(data.profilePhotoUrl);
@@ -252,7 +267,8 @@ class ProfileScreen extends ConsumerWidget {
           child: CircleAvatar(
             radius: 60,
             backgroundColor: Colors.white,
-            backgroundImage: imageUrl.isNotEmpty ? NetworkImage(imageUrl) : null,
+            backgroundImage:
+                imageUrl.isNotEmpty ? NetworkImage(imageUrl) : null,
             child: imageUrl.isEmpty
                 ? Text(
                     initials,
@@ -269,74 +285,36 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildStatsRow(Data data) {
+  /// Name + subtitle shown directly below the avatar.
+  Widget _buildNameBlock(Data data) {
     final subtitle = _profileSubtitle(data);
     return Column(
       children: [
         Text(
           data.fullName.isNotEmpty ? data.fullName : '—',
-          style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900),
+          style: const TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w900,
+            color: AppColors.textPrimary,
+          ),
         ),
-        if (subtitle.isNotEmpty)
+        if (subtitle.isNotEmpty) ...[
+          const SizedBox(height: 4),
           Text(
             subtitle,
-            style: const TextStyle(
-              color: AppColors.textSecondary,
+            style: TextStyle(
+              color: AppColors.textSecondary.withOpacity(0.7),
               letterSpacing: 1.2,
               fontWeight: FontWeight.w600,
               fontSize: 12,
             ),
           ),
-        const SizedBox(height: 24),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            _buildStatItem(data.rating.isNotEmpty ? data.rating : '—', 'Rating',
-                Icons.star_rounded),
-            _buildStatDivider(),
-            _buildStatItem('${data.totalDeliveries}', 'Tasks',
-                Icons.task_alt_rounded),
-            _buildStatDivider(),
-            _buildStatItem('${data.completedDeliveries}', 'Completed',
-                Icons.check_circle_rounded),
-          ],
-        ),
+        ],
       ],
     );
   }
 
-  Widget _buildStatItem(String value, String label, IconData icon) {
-    return Column(
-      children: [
-        Row(
-          children: [
-            Icon(icon, size: 14, color: AppColors.deliveryColor),
-            const SizedBox(width: 4),
-            Text(
-              value,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
-            ),
-          ],
-        ),
-        Text(
-          label,
-          style: TextStyle(
-            color: AppColors.textSecondary.withOpacity(0.6),
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatDivider() {
-    return Container(
-      height: 30,
-      width: 1,
-      color: Colors.grey.withOpacity(0.2),
-    );
-  }
+  // ─── Section / option widgets ──────────────────────────────────────────────
 
   Widget _buildSectionHeader(String title) {
     return Container(
@@ -352,45 +330,6 @@ class ProfileScreen extends ConsumerWidget {
         ),
       ),
     );
-  }
-
-  String _profileImageUrl(dynamic value) {
-    if (value == null) {
-      return '';
-    }
-    if (value is String) {
-      return value.trim();
-    }
-    return value.toString().trim();
-  }
-
-  String _initialsForName(String name) {
-    final parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.isEmpty || parts.first.isEmpty) {
-      return '?';
-    }
-    if (parts.length == 1) {
-      return parts.first.substring(0, 1).toUpperCase();
-    }
-    final first = parts.first.substring(0, 1);
-    final last = parts.last.substring(0, 1);
-    return '$first$last'.toUpperCase();
-  }
-
-  String _profileSubtitle(Data data) {
-    final vehicle = data.vehicleType.trim();
-    if (vehicle.isNotEmpty) {
-      return vehicle.toUpperCase();
-    }
-    final email = data.user.email?.toString().trim() ?? '';
-    if (email.isNotEmpty) {
-      return email;
-    }
-    final mobile = data.user.mobileNumber.trim();
-    if (mobile.isNotEmpty) {
-      return mobile;
-    }
-    return '';
   }
 
   Widget _buildProfileOption(
@@ -424,7 +363,8 @@ class ProfileScreen extends ConsumerWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: (iconColor ?? AppColors.deliveryColor).withOpacity(0.1),
+                  color: (iconColor ?? AppColors.deliveryColor)
+                      .withOpacity(0.1),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Icon(
@@ -442,7 +382,9 @@ class ProfileScreen extends ConsumerWidget {
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 15,
-                      color: isDestructive ? Colors.red : AppColors.textPrimary,
+                      color: isDestructive
+                          ? Colors.red
+                          : AppColors.textPrimary,
                     ),
                   ),
                   if (subtitle != null)
@@ -466,5 +408,30 @@ class ProfileScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  // ─── Utilities ─────────────────────────────────────────────────────────────
+
+  String _profileImageUrl(dynamic value) {
+    if (value == null) return '';
+    if (value is String) return value.trim();
+    return value.toString().trim();
+  }
+
+  String _initialsForName(String name) {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) return '?';
+    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+  }
+
+  String _profileSubtitle(Data data) {
+    final vehicle = data.vehicleType.trim();
+    if (vehicle.isNotEmpty) return vehicle.toUpperCase();
+    final email = data.user.email?.toString().trim() ?? '';
+    if (email.isNotEmpty) return email;
+    final mobile = data.user.mobileNumber.trim();
+    if (mobile.isNotEmpty) return mobile;
+    return '';
   }
 }

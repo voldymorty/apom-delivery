@@ -7,6 +7,30 @@ import 'package:delivery/widgets/custom_app_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+// ─── Status constants ─────────────────────────────────────────────────────────
+
+const _kAllStatuses = [
+  'completed',
+  'assigned',
+  'accepted',
+  'in_transit',
+  'reached',
+  'failed',
+  'cancelled',
+];
+
+const _kStatusLabels = {
+  'completed':  'Completed',
+  'assigned':   'Assigned',
+  'accepted':   'Accepted',
+  'in_transit': 'In Transit',
+  'reached':    'Reached',
+  'failed':     'Failed',
+  'cancelled':  'Cancelled',
+};
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
+
 class HistoryScreen extends ConsumerStatefulWidget {
   const HistoryScreen({super.key});
 
@@ -16,34 +40,45 @@ class HistoryScreen extends ConsumerStatefulWidget {
 
 class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   final TextEditingController _searchController = TextEditingController();
-  String _selectedFilter = 'All';
-  String _searchQuery = '';
-  final List<String> _filters = ['All', 'Pickups', 'Deliveries'];
+
+  // Local-only filter state (drives API call via controller)
+  String? _selectedType;   // null = all, 'pickup', 'delivery'
+  String? _selectedStatus; // null = all, or one of _kAllStatuses
+  String  _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
-    _searchController.addListener(_handleSearchChange);
+    _searchController.addListener(_onSearchChanged);
   }
 
   @override
   void dispose() {
-    _searchController.removeListener(_handleSearchChange);
-    _searchController.dispose();
+    _searchController
+      ..removeListener(_onSearchChanged)
+      ..dispose();
     super.dispose();
   }
 
-  void _handleSearchChange() {
+  void _onSearchChanged() {
     final next = _searchController.text;
-    if (next == _searchQuery) {
-      return;
-    }
-    setState(() => _searchQuery = next);
+    if (next != _searchQuery) setState(() => _searchQuery = next);
   }
+
+  void _applyApiFilter() {
+    final filter = HistoryFilter(
+      type:   _selectedType,
+      status: _selectedStatus,
+    );
+    ref.read(historyControllerProvider.notifier).applyFilter(filter);
+  }
+
+  // ─── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     final historyState = ref.watch(historyControllerProvider);
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -53,20 +88,20 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
             CustomAppBar(
               leading: IconButton(
                 icon: const Icon(
-                  Icons.arrow_back_ios_new_sharp,
-                  color: AppColors.primaryGreen,
+                  Icons.arrow_back_ios_new_rounded,
+                  color: AppColors.deliveryColor,
+                  size: 20,
                 ),
                 onPressed: () => Navigator.pop(context),
               ),
-              title: 'JOB HISTORY',
-              subtitle: 'COMPLETED PROTOCOLS',
-              centerTitle: true,
+              title: 'TASK HISTORY',
+              centerTitle: true,              
             ),
             Expanded(
               child: historyState.when(
                 loading: _buildLoading,
-                error: (error, _) => _buildError(error),
-                data: (history) => _buildContent(history),
+                error:   (e, _) => _buildError(e),
+                data:    _buildContent,
               ),
             ),
           ],
@@ -75,419 +110,650 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     );
   }
 
+  // ─── Loading ───────────────────────────────────────────────────────────────
   Widget _buildLoading() {
     return const Center(
-      child: CircularProgressIndicator(),
+      child: CircularProgressIndicator(
+        strokeWidth: 2,
+        color: AppColors.deliveryColor,
+      ),
     );
   }
+
+  // ─── Error ──────────────────────────────────────────────────────────────────
 
   Widget _buildError(Object error) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
+        padding: const EdgeInsets.symmetric(horizontal: 32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, color: Colors.red, size: 36),
-            const SizedBox(height: 12),
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: AppColors.error.withOpacity(0.08),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.error_outline_rounded,
+                color: AppColors.error,
+                size: 26,
+              ),
+            ),
+            const SizedBox(height: 16),
             const Text(
-              'Unable to load history',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+              'Could not load history',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
               error.toString(),
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: AppColors.textSecondary.withOpacity(0.8),
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.textSecondary,
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () =>
                   ref.read(historyControllerProvider.notifier).fetch(),
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildContent(HistoryModel history) {
-    return RefreshIndicator(
-      onRefresh: () => ref.read(historyControllerProvider.notifier).fetch(),
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 20),
-            _buildSearchBar(),
-            const SizedBox(height: 24),
-            _buildFilterChips(),
-            const SizedBox(height: 30),
-            _buildHistoryList(history.data),
-            const SizedBox(height: 100), // Space for bottom bar
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSearchBar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: TextField(
-        controller: _searchController,
-        decoration: InputDecoration(
-          icon: Icon(
-            Icons.search_rounded,
-            color: AppColors.textSecondary.withOpacity(0.4),
-          ),
-          hintText: 'Search Task ID or Merchant...',
-          hintStyle: TextStyle(
-            color: AppColors.textSecondary.withOpacity(0.4),
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-          ),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 20),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFilterChips() {
-    return Row(
-      children:
-          _filters.map((filter) {
-            bool isSelected = _selectedFilter == filter;
-            return Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: GestureDetector(
-                onTap: () => setState(() => _selectedFilter = filter),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isSelected ? AppColors.deliveryColor : Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color:
-                          isSelected
-                              ? AppColors.deliveryColor
-                              : Colors.black.withOpacity(0.05),
-                    ),
-                    boxShadow:
-                        isSelected
-                            ? [
-                              BoxShadow(
-                                color: AppColors.deliveryColor.withOpacity(0.2),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              ),
-                            ]
-                            : null,
-                  ),
-                  child: Text(
-                    filter,
-                    style: TextStyle(
-                      color:
-                          isSelected ? Colors.white : AppColors.textSecondary,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-              ),
-            );
-          }).toList(),
-    );
-  }
-
-  Widget _buildHistoryList(List<Datum> items) {
-    final filteredItems =
-        items.where((item) {
-          final status = item.status.trim().toLowerCase();
-          if (!status.contains('complete')) {
-            return false;
-          }
-          if (!_matchesSearch(item)) {
-            return false;
-          }
-          if (_selectedFilter == 'All') {
-            return true;
-          }
-          final type = _normalizeType(item.deliveryType);
-          if (_selectedFilter == 'Pickups') {
-            return type == 'Pickup';
-          }
-          if (_selectedFilter == 'Deliveries') {
-            return type == 'Delivery';
-          }
-          return true;
-        }).toList();
-
-    // Sort by last delivered (completedAt) descending
-    filteredItems.sort((a, b) {
-      final dateA = a.completedAt ?? a.updatedAt ?? a.createdAt ?? DateTime(1970);
-      final dateB = b.completedAt ?? b.updatedAt ?? b.createdAt ?? DateTime(1970);
-      return dateB.compareTo(dateA);
-    });
-
-    if (filteredItems.isEmpty) {
-      return _buildEmptyState();
-    }
-
-    return Column(
-      children: filteredItems.map((item) => _buildHistoryCard(item)).toList(),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 40),
-      child: Center(
-        child: Column(
-          children: [
-            Icon(
-              Icons.history_toggle_off_rounded,
-              size: 40,
-              color: AppColors.textSecondary.withOpacity(0.3),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'No history found',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                color: AppColors.textSecondary.withOpacity(0.8),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHistoryCard(Datum item) {
-    final type = _normalizeType(item.deliveryType);
-    final isPickup = type == 'Pickup';
-    Color themeColor =
-        isPickup ? AppColors.primaryGreen : AppColors.deliveryColor;
-    final id = _displayId(item);
-    final title = _displayTitle(item, isPickup);
-    final client = _displayClient(item, isPickup);
-    final amount = _displayAmount(item);
-    final dateText = _displayDate(item);
-    final timeText = _displayTime(item);
-    final status = _displayStatus(item);
-    final statusColor = _statusColor(item);
-
-    return InkWell(
-      onTap: () {
-        final taskId = item.deliveryId.toString();
-        if (isPickup) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => PickupDetailsScreen(taskId: taskId),
-            ),
-          );
-        } else {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => DeliveryDetailsScreen(taskId: taskId),
-            ),
-          );
-        }
-      },
-      borderRadius: BorderRadius.circular(28),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 20),
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: Colors.black.withOpacity(0.04)),
-        ),
-        child: Column(
-          children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: themeColor.withOpacity(0.1),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.deliveryColor,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      isPickup
-                          ? Icons.arrow_upward_rounded
-                          : Icons.arrow_downward_rounded,
-                      size: 14,
-                      color: themeColor,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      type.toUpperCase(),
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w900,
-                        color: themeColor,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ],
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 28,
+                  vertical: 12,
                 ),
               ),
-              const Spacer(),
-              Text(
-                'ID: #$id',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textSecondary.withOpacity(0.4),
-                ),
+              child: const Text(
+                'Try again',
+                style: TextStyle(fontWeight: FontWeight.w700),
               ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      client,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textSecondary.withOpacity(0.6),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Content ────────────────────────────────────────────────────────────────
+
+  Widget _buildContent(HistoryModel history) {
+    final filtered = _applyLocalSearch(history.data);
+
+    return RefreshIndicator(
+      onRefresh: () => ref.read(historyControllerProvider.notifier).fetch(),
+      color: AppColors.deliveryColor,
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+              child: Column(
                 children: [
-                  Text(
-                    amount,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w900,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: statusColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      status,
-                      style: TextStyle(
-                        fontSize: 8,
-                        fontWeight: FontWeight.w900,
-                        color: statusColor,
-                      ),
-                    ),
-                  ),
+                  _buildSearchAndFilter(),
+                  const SizedBox(height: 16),
+                  _buildTypeToggle(),
+                  const SizedBox(height: 20),
+                  _buildSummaryRow(history.data),
+                  const SizedBox(height: 8),
                 ],
               ),
-            ],
+            ),
           ),
-          const SizedBox(height: 20),
-          Divider(color: Colors.black.withOpacity(0.05), height: 1),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Icon(
-                Icons.calendar_today_rounded,
-                size: 14,
-                color: AppColors.textSecondary.withOpacity(0.5),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                dateText,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textSecondary.withOpacity(0.5),
+          if (filtered.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: _buildEmpty(),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (_, i) => _buildCard(filtered[i]),
+                  childCount: filtered.length,
                 ),
               ),
-              const SizedBox(width: 20),
-              Icon(
-                Icons.access_time_rounded,
-                size: 14,
-                color: AppColors.textSecondary.withOpacity(0.5),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                timeText,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textSecondary.withOpacity(0.5),
-                ),
-              ),
-              const Spacer(),
-              const Icon(
-                Icons.arrow_forward_ios_rounded,
-                size: 12,
-                color: AppColors.textSecondary,
-              ),
-            ],
-          ),
+            ),
         ],
       ),
-    ),
-  );
-}
+    );
+  }
 
-  bool _matchesSearch(Datum item) {
+  // ─── Search + filter row ────────────────────────────────────────────────────
+
+  Widget _buildSearchAndFilter() {
+    return Row(
+      children: [
+        Expanded(
+          child: Container(
+            height: 48,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.divider),
+            ),
+            child: TextField(
+              controller: _searchController,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textPrimary,
+              ),
+              decoration: InputDecoration(
+                prefixIcon: Icon(
+                  Icons.search_rounded,
+                  color: AppColors.textSecondary.withOpacity(0.5),
+                  size: 20,
+                ),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? GestureDetector(
+                        onTap: () => _searchController.clear(),
+                        child: Icon(
+                          Icons.close_rounded,
+                          color: AppColors.textSecondary.withOpacity(0.5),
+                          size: 18,
+                        ),
+                      )
+                    : null,
+                hintText: 'Search ID, farmer, vendor…',
+                hintStyle: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textSecondary.withOpacity(0.4),
+                ),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              cursorColor: AppColors.deliveryColor,
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        _buildFilterButton(),
+      ],
+    );
+  }
+
+  Widget _buildFilterButton() {
+    final hasFilter = _selectedStatus != null;
+    return GestureDetector(
+      onTap: _showFilterSheet,
+      child: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: hasFilter ? AppColors.deliveryColor : Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: hasFilter ? AppColors.deliveryColor : AppColors.divider,
+          ),
+        ),
+        child: Icon(
+          Icons.tune_rounded,
+          size: 20,
+          color: hasFilter ? Colors.white : AppColors.textSecondary,
+        ),
+      ),
+    );
+  }
+
+  // ─── Type toggle (All / Pickup / Delivery) ──────────────────────────────────
+
+  Widget _buildTypeToggle() {
+    const types = [
+      (label: 'All',       value: null,       icon: Icons.grid_view_rounded),
+      (label: 'Pickups',   value: 'pickup',   icon: Icons.arrow_upward_rounded),
+      (label: 'Deliveries',value: 'delivery', icon: Icons.arrow_downward_rounded),
+    ];
+
+    return Container(
+      height: 48,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.divider),
+      ),
+      child: Row(
+        children: types.map((t) {
+          final selected = _selectedType == t.value;
+          return Expanded(
+            child: GestureDetector(
+              onTap: () {
+                setState(() => _selectedType = t.value);
+                _applyApiFilter();
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: const EdgeInsets.all(6),
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                decoration: BoxDecoration(
+                  color: selected ? AppColors.deliveryColor : Colors.transparent,
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      t.icon,
+                      size: 15,
+                      color: selected
+                          ? Colors.white
+                          : AppColors.textSecondary,
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      t.label,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                        color: selected
+                            ? Colors.white
+                            : AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  // ─── Summary row ────────────────────────────────────────────────────────────
+
+  Widget _buildSummaryRow(List<Datum> all) {
+    int countType(String type) => all
+        .where((d) => _normalizeType(d.deliveryType) == type)
+        .length;
+
+    final total     = all.length;
+    final pickups   = countType('Pickup');
+    final deliveries= countType('Delivery');
+
+    return Row(
+      children: [
+        _buildStatChip(
+          label: 'Total',
+          value: total.toString(),
+          color: AppColors.deliveryColor,
+        ),
+        const SizedBox(width: 10),
+        _buildStatChip(
+          label: 'Pickups',
+          value: pickups.toString(),
+          color: AppColors.primaryGreen,
+        ),
+        const SizedBox(width: 10),
+        _buildStatChip(
+          label: 'Deliveries',
+          value: deliveries.toString(),
+          color: AppColors.deliveryColor.withOpacity(0.7),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatChip({
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.07),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.15)),
+        ),
+        child: Column(
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+                color: color,
+                height: 1,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: color.withOpacity(0.7),
+                letterSpacing: 0.3,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Empty state ────────────────────────────────────────────────────────────
+
+  Widget _buildEmpty() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.inbox_rounded,
+              size: 44,
+              color: AppColors.textSecondary.withOpacity(0.25),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _searchQuery.isNotEmpty
+                  ? 'No results for "$_searchQuery"'
+                  : 'No jobs found',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            if (_searchQuery.isNotEmpty || _selectedStatus != null ||
+                _selectedType != null) ...[
+              const SizedBox(height: 8),
+              GestureDetector(
+                onTap: _clearAllFilters,
+                child: Text(
+                  'Clear filters',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.deliveryColor,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _clearAllFilters() {
+    _searchController.clear();
+    setState(() {
+      _selectedType   = null;
+      _selectedStatus = null;
+      _searchQuery    = '';
+    });
+    _applyApiFilter();
+  }
+
+  // ─── Card ───────────────────────────────────────────────────────────────────
+
+  Widget _buildCard(Datum item) {
+    final isPickup   = _normalizeType(item.deliveryType) == 'Pickup';
+    final accentColor= isPickup ? AppColors.primaryGreen : AppColors.vendorColor;
+    final title      = _displayTitle(item, isPickup);
+    final client     = _displayClient(item, isPickup);
+    final quantity   = _displayQuantity(item);
+    final amount     = _displayAmount(item);
+    final dateText   = _displayDate(item);
+    final timeSlot   = item.scheduledTimeSlot.trim();
+    final statusText = _displayStatus(item);
+    final statusColor= _statusColor(item);
+    final id         = _displayId(item);
+
+    return GestureDetector(
+      onTap: () {
+        final taskId = item.deliveryId.toString();
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => isPickup
+                ? PickupDetailsScreen(taskId: taskId)
+                : DeliveryDetailsScreen(taskId: taskId),
+          ),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: AppColors.divider),
+        ),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Accent bar
+              Container(
+                width: 4,
+                decoration: BoxDecoration(
+                  color: accentColor,
+                  borderRadius: const BorderRadius.only(
+                    topLeft:    Radius.circular(18),
+                    bottomLeft: Radius.circular(18),
+                  ),
+                ),
+              ),
+
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Row 1: type badge + status + id
+                      Row(
+                        children: [
+                          _TypeBadge(
+                            label: isPickup ? 'PICKUP' : 'DELIVERY',
+                            color: accentColor,
+                          ),
+                          const SizedBox(width: 6),
+                          _StatusBadge(
+                            label: statusText,
+                            color: statusColor,
+                          ),
+                          const Spacer(),
+                          Text(
+                            id,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textSecondary.withOpacity(0.4),
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 16,
+                            color: AppColors.textSecondary.withOpacity(0.35),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // Row 2: title + quantity
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  title,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.textPrimary,
+                                    height: 1.2,
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  client,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textSecondary
+                                        .withOpacity(0.65),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                quantity,
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w900,
+                                  color: accentColor,
+                                ),
+                              ),
+                              if (amount.isNotEmpty)
+                                Text(
+                                  amount,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 12),
+                      Divider(
+                        color: AppColors.divider,
+                        height: 1,
+                      ),
+                      const SizedBox(height: 10),
+
+                      // Row 3: date + time
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.calendar_today_rounded,
+                            size: 12,
+                            color: AppColors.textSecondary.withOpacity(0.5),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            dateText,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textSecondary.withOpacity(0.6),
+                            ),
+                          ),
+                          if (timeSlot.isNotEmpty) ...[
+                            const SizedBox(width: 14),
+                            Icon(
+                              Icons.access_time_rounded,
+                              size: 12,
+                              color: AppColors.textSecondary.withOpacity(0.5),
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              timeSlot,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color:
+                                    AppColors.textSecondary.withOpacity(0.6),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─── Filter bottom sheet ────────────────────────────────────────────────────
+
+  void _showFilterSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => _FilterSheet(
+        selectedStatus: _selectedStatus,
+        onApply: (status) {
+          setState(() => _selectedStatus = status);
+          _applyApiFilter();
+        },
+        onClear: () {
+          setState(() => _selectedStatus = null);
+          _applyApiFilter();
+        },
+      ),
+    );
+  }
+
+  // ─── Filtering & search ─────────────────────────────────────────────────────
+
+  List<Datum> _applyLocalSearch(List<Datum> items) {
     final query = _searchQuery.trim().toLowerCase();
-    if (query.isEmpty) {
-      return true;
-    }
+    if (query.isEmpty) return List.from(items)
+      ..sort(_sortByDate);
+
+    final result = items
+        .where((item) => _matchesSearch(item, query))
+        .toList()
+      ..sort(_sortByDate);
+    return result;
+  }
+
+  int _sortByDate(Datum a, Datum b) {
+    final dateA =
+        a.completedAt ?? a.updatedAt ?? a.createdAt ?? DateTime(1970);
+    final dateB =
+        b.completedAt ?? b.updatedAt ?? b.createdAt ?? DateTime(1970);
+    return dateB.compareTo(dateA);
+  }
+
+  bool _matchesSearch(Datum item, String query) {
     final buffer = StringBuffer()
       ..write(item.deliveryNumber)
       ..write(' ')
@@ -500,164 +766,323 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       ..write(item.pickupAddress)
       ..write(' ')
       ..write(item.deliveryAddress)
-      ..write(' ');
-
-    final farmerName = _safeTrim(item.farmer?.fullName);
-    final vendorShop = _safeTrim(item.vendor?.shopName);
-    final vendorOwner = _safeTrim(item.vendor?.ownerName);
-    final productName = _safeTrim(item.crop?.product.productName);
-    final orderNumber = _safeTrim(item.order?.orderNumber);
-
-    buffer
-      ..write(farmerName)
       ..write(' ')
-      ..write(vendorShop)
+      ..write(item.farmer?.fullName ?? '')
       ..write(' ')
-      ..write(vendorOwner)
+      ..write(item.vendor?.shopName ?? '')
       ..write(' ')
-      ..write(productName)
+      ..write(item.vendor?.ownerName ?? '')
       ..write(' ')
-      ..write(orderNumber);
-
+      ..write(item.crop?.product.productName ?? '')
+      ..write(' ')
+      ..write(item.order?.orderNumber ?? '');
     return buffer.toString().toLowerCase().contains(query);
   }
 
+  // ─── Display helpers ────────────────────────────────────────────────────────
+
   String _normalizeType(String value) {
-    final normalized = value.trim().toLowerCase();
-    if (normalized == 'pickup' || normalized == 'pickups') {
-      return 'Pickup';
-    }
-    if (normalized == 'delivery' || normalized == 'deliveries') {
-      return 'Delivery';
-    }
-    return normalized.isNotEmpty ? normalized.toUpperCase() : 'Unknown';
+    final v = value.trim().toLowerCase();
+    if (v == 'pickup')   return 'Pickup';
+    if (v == 'delivery') return 'Delivery';
+    return value;
   }
 
   String _displayId(Datum item) {
-    final trimmed = item.deliveryNumber.trim();
-    if (trimmed.isNotEmpty) {
-      return trimmed;
-    }
-    return item.deliveryId.toString();
+    final t = item.deliveryNumber.trim();
+    return t.isNotEmpty ? t : '#${item.deliveryId}';
   }
 
   String _displayTitle(Datum item, bool isPickup) {
-    final product = _safeTrim(item.crop?.product.productName);
-    if (product.isNotEmpty) {
-      return product;
+    final raw = item.crop?.product.productName.trim() ?? '';
+    if (raw.isNotEmpty) {
+      final cleaned =
+          raw.replaceAll(RegExp(r'\s*\(\d+(?:\.\d+)?kg\)', caseSensitive: false), '').trim();
+      if (cleaned.isNotEmpty) {
+        return cleaned[0].toUpperCase() + cleaned.substring(1);
+      }
     }
     if (isPickup) {
-      final name = item.pickupContactName.trim();
-      return name.isNotEmpty ? name : 'Pickup Location';
+      final n = item.pickupContactName.trim();
+      return n.isNotEmpty ? n : 'Pickup';
     }
-    final name = item.deliveryContactName.trim();
-    return name.isNotEmpty ? name : 'Delivery Location';
+    final n = item.deliveryContactName.trim();
+    return n.isNotEmpty ? n : 'Delivery';
   }
 
   String _displayClient(Datum item, bool isPickup) {
     if (isPickup) {
-      final farmer = _safeTrim(item.farmer?.fullName);
-      if (farmer.isNotEmpty) {
-        return farmer;
-      }
-      final pickupName = item.pickupContactName.trim();
-      return pickupName.isNotEmpty ? pickupName : 'Pickup Client';
+      final n = item.farmer?.fullName.trim() ?? '';
+      if (n.isNotEmpty) return n;
+      return item.pickupContactName.trim().isNotEmpty
+          ? item.pickupContactName.trim()
+          : '—';
     }
-    final vendorShop = _safeTrim(item.vendor?.shopName);
-    if (vendorShop.isNotEmpty) {
-      return vendorShop;
+    final shop = item.vendor?.shopName.trim() ?? '';
+    if (shop.isNotEmpty) return shop;
+    final owner = item.vendor?.ownerName.trim() ?? '';
+    if (owner.isNotEmpty) return owner;
+    return item.deliveryContactName.trim().isNotEmpty
+        ? item.deliveryContactName.trim()
+        : '—';
+  }
+
+  String _displayQuantity(Datum item) {
+    final actual   = item.actualQuantityKg?.trim() ?? '';
+    final expected = item.expectedQuantityKg.trim();
+    final raw      = actual.isNotEmpty ? actual : expected;
+    if (raw.isEmpty) return '—';
+    final num = double.tryParse(raw);
+    if (num != null) {
+      final s = num == num.truncateToDouble()
+          ? num.toInt().toString()
+          : raw;
+      return '$s KG';
     }
-    final vendorOwner = _safeTrim(item.vendor?.ownerName);
-    if (vendorOwner.isNotEmpty) {
-      return vendorOwner;
-    }
-    final deliveryName = item.deliveryContactName.trim();
-    return deliveryName.isNotEmpty ? deliveryName : 'Delivery Client';
+    return raw.toUpperCase();
   }
 
   String _displayAmount(Datum item) {
-    final actual = _safeTrim(item.actualQuantityKg?.toString());
-    final expected = item.expectedQuantityKg.trim();
-    final raw = actual.isNotEmpty ? actual : expected;
-    if (raw.isEmpty) {
-      return '-';
-    }
-    if (raw.toLowerCase().contains('kg')) {
-      return raw.toUpperCase();
-    }
-    return '$raw KG';
+    final raw = item.toJson();
+    final finalAmt = raw['final_procurement_amount']?.toString() ?? '';
+    final procAmt  = raw['procurement_amount']?.toString() ?? '';
+    final src      = finalAmt.isNotEmpty ? finalAmt : procAmt;
+    if (src.isEmpty) return '';
+    final num = double.tryParse(src);
+    if (num == null) return '';
+    return '₹${num.toStringAsFixed(0)}';
   }
 
   String _displayDate(Datum item) {
-    final date = item.completedAt ?? item.scheduledDate ?? item.createdAt;
-    if (date == null) {
-      return '-';
-    }
-    return _formatDate(date);
-  }
-
-  String _displayTime(Datum item) {
-    final slot = item.scheduledTimeSlot.trim();
-    if (slot.isNotEmpty) {
-      return slot;
-    }
-    final time = item.completedAt ?? item.scheduledDate ?? item.createdAt;
-    if (time == null) {
-      return '-';
-    }
-    return _formatTime(time);
+    final d = item.completedAt ?? item.scheduledDate ?? item.createdAt;
+    if (d == null) return '—';
+    const m = [
+      'Jan','Feb','Mar','Apr','May','Jun',
+      'Jul','Aug','Sep','Oct','Nov','Dec',
+    ];
+    return '${m[d.month - 1]} ${d.day}, ${d.year}';
   }
 
   String _displayStatus(Datum item) {
-    final status = item.status.trim();
-    if (status.isEmpty) {
-      return 'UNKNOWN';
-    }
-    return status.toUpperCase();
+    final s = item.status.trim();
+    return _kStatusLabels[s.toLowerCase()] ?? s.toUpperCase();
   }
 
   Color _statusColor(Datum item) {
-    final status = item.status.trim().toLowerCase();
-    if (status.contains('complete')) {
-      return AppColors.success;
+    switch (item.status.trim().toLowerCase()) {
+      case 'completed':  return AppColors.success;
+      case 'failed':     return AppColors.error;
+      case 'cancelled':  return AppColors.warning;
+      case 'in_transit': return AppColors.deliveryColor;
+      case 'reached':    return AppColors.primaryGreen;
+      default:           return AppColors.textSecondary;
     }
-    if (status.contains('fail')) {
-      return AppColors.error;
-    }
-    if (status.contains('cancel')) {
-      return AppColors.warning;
-    }
-    return AppColors.textSecondary;
+  }
+}
+
+// ─── Sub-widgets ──────────────────────────────────────────────────────────────
+
+class _TypeBadge extends StatelessWidget {
+  final String label;
+  final Color  color;
+  const _TypeBadge({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w900,
+          color: color,
+          letterSpacing: 0.6,
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusBadge extends StatelessWidget {
+  final String label;
+  final Color  color;
+  const _StatusBadge({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w800,
+          color: color,
+          letterSpacing: 0.4,
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Filter bottom sheet ──────────────────────────────────────────────────────
+
+class _FilterSheet extends StatefulWidget {
+  final String? selectedStatus;
+  final void Function(String? status) onApply;
+  final VoidCallback onClear;
+
+  const _FilterSheet({
+    required this.selectedStatus,
+    required this.onApply,
+    required this.onClear,
+  });
+
+  @override
+  State<_FilterSheet> createState() => _FilterSheetState();
+}
+
+class _FilterSheetState extends State<_FilterSheet> {
+  String? _status;
+
+  @override
+  void initState() {
+    super.initState();
+    _status = widget.selectedStatus;
   }
 
-  String _formatDate(DateTime date) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    final month = months[(date.month - 1).clamp(0, 11)];
-    return '$month ${date.day}, ${date.year}';
-  }
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Handle
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.divider,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
 
-  String _formatTime(DateTime date) {
-    final hour = date.hour;
-    final minute = date.minute.toString().padLeft(2, '0');
-    final period = hour >= 12 ? 'PM' : 'AM';
-    final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
-    return '$displayHour:$minute $period';
-  }
+            Row(
+              children: [
+                const Text(
+                  'Filter by status',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const Spacer(),
+                if (_status != null)
+                  GestureDetector(
+                    onTap: () {
+                      setState(() => _status = null);
+                      widget.onClear();
+                      Navigator.pop(context);
+                    },
+                    child: Text(
+                      'Clear',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.deliveryColor,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
 
-  String _safeTrim(String? value) {
-    return value?.trim() ?? '';
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _kAllStatuses.map((s) {
+                final selected = _status == s;
+                final label    = _kStatusLabels[s] ?? s;
+                return GestureDetector(
+                  onTap: () => setState(() => _status = selected ? null : s),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 9,
+                    ),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? AppColors.deliveryColor
+                          : Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: selected
+                            ? AppColors.deliveryColor
+                            : AppColors.divider,
+                      ),
+                    ),
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: selected
+                            ? Colors.white
+                            : AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+
+            const SizedBox(height: 24),
+
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: () {
+                  widget.onApply(_status);
+                  Navigator.pop(context);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.deliveryColor,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: const Text(
+                  'Apply',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

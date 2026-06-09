@@ -280,6 +280,9 @@ class Farmer {
   String locationAddress;
   dynamic user;
 
+  String get mobileNumber =>
+      (user is Map) ? (user['mobile_number']?.toString() ?? '') : '';
+
   Farmer({
     required this.fullName,
     required this.locationAddress,
